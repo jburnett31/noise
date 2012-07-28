@@ -152,12 +152,71 @@
 (ctl 5 :bpm 250)
 (stop)
 
+(def metro (metronome 128))
+
+(definst c-hat [amp 0.8 t 0.04]
+  (let [env (env-gen (perc 0.001 t) 1 1 0 1 FREE)
+        noise (white-noise)
+        sqr (* (env-gen (perc 0.01 0.04)) (pulse 880 0.2))
+        filt (bpf (+ sqr noise) 9000 0.5)]
+    (* amp env filt)))
+
+
+(definst o-hat [amp 0.8 t 0.5]
+  (let [env (env-gen (perc 0.001 t) 1 1 0 1 FREE)
+        noise (white-noise)
+        sqr (* (env-gen (perc 0.01 0.04)) (pulse 880 0.2))
+        filt (bpf (+ sqr noise) 9000 0.5)]
+    (* amp env filt)))
+
+(defn swinger [beat]
+  (at (metro beat) (o-hat 10.0))
+  (at (metro (inc beat)) (c-hat 10.0))
+  (at (metro (+ 1.65 beat)) (c-hat 10.0))
+  (apply-at (metro (+ 2 beat)) #'swinger (+ 2 beat) []))
+
+
+(swinger (metro))
+(stop)
+
+(definst saw-wave [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 1.0]
+  (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
+     (saw freq)
+     vol))
+(saw-wave)
+
+(definst square-wave [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 1.0]
+  (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
+     (lf-pulse freq)
+     vol))
+(square-wave)
+
+(definst noisey [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 1.0]
+  (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
+     (pink-noise) ; also have (white-noise) and others...
+     vol))
+(noisey)
+
+(definst triangle-wave [freq 440 attack 0.01 sustain 0.1 release 0.4 vol 1.0]
+  (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
+     (lf-tri freq)
+     vol))
+(triangle-wave)
+
+(definst spooky-house [freq 440 width 0.2
+                       attack 0.3 sustain 4 release 0.3
+                       vol 1.0]
+  (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
+     (sin-osc (+ freq (* 20 (lf-pulse:kr 0.5 0 width))))
+     vol))
+(spooky-house)
+
 (def server (osc-server 44100 "osc-clj"))
 (zero-conf-on)
 (osc-listen server (fn [msg] (println msg)) :debug)
 (osc-rm-listener server :debug)
 (osc-handle server "/1/toggle1" (fn [msg] (if (= 1.0 (first (:args msg)))
-                                           (def ds (dubstep))
+                                           (def ds (dubstep 120 1 50 1 1 3))
                                            (kill ds))))
 (osc-handle server "/1/fader1" (fn [msg] (let [bpm (first (:args msg))]
                                           (ctl ds :bpm (+ 50 (* bpm 200))))))
@@ -166,8 +225,10 @@
 (osc-handle server "/1/fader3" (fn [msg] (let [note (first (:args msg))]
                                           (ctl ds :note (+ 20 (* 100 note))))))
 (osc-handle server "/1/toggle2" (fn [msg] (if (= 1.0 (first (:args msg)))
-                                           (def bl (blue-beep))
-                                           (stop))))
+                                           (def sw (swinger (metro)))
+                                           ())))
+(ctl ds :v 3)
+(stop)
 
 (defn -main
   "I don't do a whole lot."
