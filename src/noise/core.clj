@@ -211,6 +211,48 @@
      vol))
 (spooky-house)
 
+(definst kick2 []
+  (let [src (sin-osc 80)
+        env (env-gen (perc 0.001 0.3) :action FREE)]
+    (* 0.7 src env)))
+
+(definst overpad [note 60 amp 0.7 attack 0.001 release 2]
+  (let [freq (midicps note)
+        env (env-gen (perc attack release) :action FREE)
+        f-env (+ freq (* 3 freq (env-gen (perc 0.012 (- release 0.1)))))
+        bfreq (/ freq 2)
+        sig (apply +
+                   (concat (* 0.7 (sin-osc [bfreq (* 0.99 bfreq)]))
+                           (lpf (saw [freq (* freq 1.01)]) f-env)))
+        audio (* amp env sig)]
+    audio))
+(overpad)
+
+(defn player [beat notes]
+  (let [notes (if (empty? notes)
+                [50 55 53 50]
+                notes)]
+    (at (metro beat)
+      (kick2))
+    (at (metro beat)
+      (if (zero? (mod beat 5))
+        (overpad (+ 24 (choose notes)) 0.2 0.75 0.005)))
+    (at (metro (+ 0.5 beat))
+      (if (zero? (mod beat 6))
+        (overpad (+ 12 (choose notes)) 0.5 0.15 0.1)
+        (overpad (choose notes) 0.5 0.15 0.1)))
+    (apply-at (metro (inc beat)) #'player (inc beat) (next notes) [])))
+
+(player (metro) [])
+(stop)
+
+(definst trancy-waves []
+  (* 0.2
+     (+ (sin-osc 200) (saw 200) (saw 203) (sin-osc 400))))
+(trancy-waves)
+(kill trancy-waves)
+
+
 (def server (osc-server 44100 "osc-clj"))
 (zero-conf-on)
 (osc-listen server (fn [msg] (println msg)) :debug)
@@ -227,6 +269,10 @@
 (osc-handle server "/1/toggle2" (fn [msg] (if (= 1.0 (first (:args msg)))
                                            (def sw (swinger (metro)))
                                            ())))
+(osc-handle server "/1/push1" (fn [msg] (if (= 1.0 (first (:args msg)))
+                                         (spooky-house 440 0.2 0.3 4 0.3 3.0))))
+(osc-handle server "/1/push2" (fn [msg] (if (= 1.0 (first (:args msg)))
+                                         (kick))))
 (ctl ds :v 3)
 (stop)
 
