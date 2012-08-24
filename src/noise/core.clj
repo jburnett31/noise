@@ -125,6 +125,17 @@
         (clip2 (+ wob kick snare) 1)))
 (stop)
 
+(definst snare [note 60 ]
+  (let [note (midi->hz note)
+        sig (pink-noise [1 1])
+        imp ()
+        ;sn (* 3 sig imp)
+        ;sn (+ sn (bpf (* 4 sn) 2000))
+        ;sn (clip2 sn 1)
+        ]
+    (* imp sig)
+    ))
+
 (defsynth dubstep [bpm 120 wobble 1 note 50 snare-vol 1 kick-vol 1 v 1]
   (let [trig (impulse:kr (/ bpm 120))
         freq (midicps note)
@@ -161,7 +172,6 @@
         filt (bpf (+ sqr noise) 9000 0.5)]
     (* amp env filt)))
 
-
 (definst o-hat [amp 0.8 t 0.5]
   (let [env (env-gen (perc 0.001 t) 1 1 0 1 FREE)
         noise (white-noise)
@@ -179,13 +189,30 @@
 (swinger (metro))
 (stop)
 
+(defn beaty [beat]
+  (at (metro beat) (o-hat 10.0))
+  (at (metro (inc beat)) (c-hat 10.0))
+  (at (metro (+ 1.65 beat)) (c-hat 10.0))
+  (at (metro (+ 2 beat)) (o-hat 10.0))
+  (at (metro (+ 3 beat)) (kick 10.0))
+  (apply-at (metro (+ 4 beat)) #'beaty (+ 4 beat) []))
+(beaty (metro))
+(stop)
+
+(defn bassy [beat]
+  (at (metro beat) (kick 10.0))
+  (at (metro (+ 0.15 beat)) (kick 8.0))
+  (apply-at (metro (+ 0.3 beat)) #'bassy (+ 0.3 beat) []))
+(bassy (metro))
+(stop)
+
 (definst saw-wave [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 1.0]
   (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
      (saw freq)
      vol))
 (saw-wave)
 
-(definst square-wave [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 1.0]
+(definst square-wave [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 0.2]
   (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
      (lf-pulse freq)
      vol))
@@ -193,15 +220,15 @@
 
 (definst noisey [freq 440 attack 0.01 sustain 0.4 release 0.1 vol 1.0]
   (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
-     (pink-noise) ; also have (white-noise) and others...
+     (white-noise) ; also have (white-noise) and others...
      vol))
-(noisey)
+(noisey 440 0.05 0.9 0.1 1.0)
 
 (definst triangle-wave [freq 440 attack 0.01 sustain 0.1 release 0.4 vol 1.0]
   (* (env-gen (lin-env attack sustain release) 1 1 0 1 FREE)
      (lf-tri freq)
      vol))
-(triangle-wave)
+(triangle-wave 200)
 
 (definst spooky-house [freq 440 width 0.2
                        attack 0.3 sustain 4 release 0.3
@@ -228,6 +255,33 @@
     audio))
 (overpad)
 
+(def stuff [60 65 80 50 70])
+(defn prog [beat notes]
+  (at (metro beat)
+    (overpad (first notes)))
+  (apply-at (metro (inc beat)) #'prog (inc beat) (next notes) []))
+(prog (metro) stuff)
+
+
+(defn play-stuff [beat notes attacks]
+  (when notes
+    (let [note (first notes)
+          attack (first attacks)
+          amp 0.6
+          release 0.5]
+      (at beat (overpad note amp attack release))
+      (apply-at (metro (inc beat)) #'play-stuff (inc beat) (next notes) (next attacks) []))))
+(play-stuff (metro) (cycle stuff) (cycle '(0.1 0.01 0.001)))
+(stop)
+
+
+(definst noise1 [note 60 amp 0.7 attack 0.001 release 2]
+  (let [freq (midi->hz note)
+        env (env-gen (perc attack release) :action FREE)
+        sig (sin-osc freq 0.0)
+        audio (* amp env sig)]
+    audio))
+
 (defn player [beat notes]
   (let [notes (if (empty? notes)
                 [50 55 53 50]
@@ -253,6 +307,9 @@
 (kill trancy-waves)
 
 
+
+
+
 (def server (osc-server 44100 "osc-clj"))
 (zero-conf-on)
 (osc-listen server (fn [msg] (println msg)) :debug)
@@ -268,7 +325,7 @@
                                           (ctl ds :note (+ 20 (* 100 note))))))
 (osc-handle server "/1/toggle2" (fn [msg] (if (= 1.0 (first (:args msg)))
                                            (def sw (swinger (metro)))
-                                           ())))
+                                           (stop))))
 (osc-handle server "/1/push1" (fn [msg] (if (= 1.0 (first (:args msg)))
                                          (spooky-house 440 0.2 0.3 4 0.3 3.0))))
 (osc-handle server "/1/push2" (fn [msg] (if (= 1.0 (first (:args msg)))
